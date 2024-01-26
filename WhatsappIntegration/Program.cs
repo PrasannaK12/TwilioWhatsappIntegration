@@ -1,7 +1,10 @@
 ﻿using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
+using iTextSharp.text.pdf;
 using System;
+using System.Reflection.PortableExecutable;
+using System.Xml;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
@@ -10,15 +13,24 @@ class Program
 {
     static void Main(string[] args)
     {
-        string connectionString = "DtNtJGwDft/caNk85/JsyFgvcHxhHx+anV8+AStRP4tNg==;EndpointSuffix=core.windows.net";
+        //URL from we are retrieving the PDF in Bytes, From Vendor side.
+        string url = "";
+        //Calling the URL.
+        var dummyPdf = MakeGetRequest(url);
+        //we are protecting PDF with dummy password, later you can configure it with your re
+        var protectedPdf = ProtectPdfWithPassword(dummyPdf, "abcd1234");
+        //we can configure those values in appsetting and local setting.
+        string connectionString = "DefaultEndpoit/caNk85/JsyFgvcHxhHx+anV8+AStRP4tNg==;EndpointSuffix=core.windows.net";
         string containerName = "prasann";
-        string blobName = "dummy_invoice.pdf";
+        string blobName = "dummy_invoice_pk1.pdf";
         int maxAccessCount = 3;
         TimeSpan expirationTime = TimeSpan.FromMinutes(1); // 12 houss
-
+        //uploading the protected PDF to blob
+        UploadToBlobStorage(connectionString, containerName, blobName, protectedPdf);
+        //generating the SAS with time period. after the time period it will not accessible.
         string sasToken = GenerateSasToken(connectionString, containerName, blobName, maxAccessCount, expirationTime);
-        WhatsappIntegration(sasToken);
-        Console.WriteLine($"SAS Token: {sasToken}");
+        //integration with Twilio. to send PDF and message to User.
+        WhatsappIntegration(sasToken);       
     }
 
     static string GenerateSasToken(string connectionString, string containerName, string blobName, int maxAccessCount, TimeSpan expirationTime)
@@ -50,14 +62,14 @@ class Program
     }
     public static string WhatsappIntegration(string sasUrl)
     {
-        var accountSid = "AC1cbb8e6b45fdea5"; // Replace with your Account SID
-        var authToken = "8eb955ea316a76a9a4";   // Replace with your Auth Token
+        var accountSid = ""; // Replace with your Account SID
+        var authToken = "";   // Replace with your Auth Token
         TwilioClient.Init(accountSid, authToken);
 
         try
         {
             var messageOptions = new CreateMessageOptions(
-              new PhoneNumber("whatsapp:+918149****")); // Replace with recipient's number
+              new PhoneNumber("whatsapp:+918149******")); // Replace with recipient's number
             messageOptions.From = new PhoneNumber("whatsapp:+14155238886"); // Your Twilio WhatsApp number
             messageOptions.Body = "Hi.";
             if (!string.IsNullOrEmpty(sasUrl))
@@ -73,5 +85,58 @@ class Program
             return "Error sending message: " + ex.Message;
         }
     }
+    public static byte[] MakeGetRequest(string url)
+    {
+        try
+        {
+            using (HttpClient httpClient = new HttpClient())
+            {
+                HttpResponseMessage response = httpClient.GetAsync(url).Result;
 
+                if (response.IsSuccessStatusCode)
+                {
+                    byte[] content = response.Content.ReadAsByteArrayAsync().Result;
+                    return content;
+                }
+                else
+                {
+                    return null;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+            throw;
+        }
+    }
+    public static byte[] ProtectPdfWithPassword(byte[] pdfContent, string password)
+    {
+        using (MemoryStream inputMemoryStream = new MemoryStream(pdfContent))
+        using (MemoryStream outputMemoryStream = new MemoryStream())
+        {
+            PdfReader pdfReader = new PdfReader(inputMemoryStream);
+            PdfEncryptor.Encrypt(pdfReader, outputMemoryStream, true, password, password, PdfWriter.ALLOW_PRINTING);
+
+            return outputMemoryStream.ToArray();
+        }
+    }
+    public static void UploadToBlobStorage(string connectionString, string containerName, string blobName, byte[] pdfData)
+    {
+        // Create a BlobServiceClient object which will be used to create a container client
+        BlobServiceClient blobServiceClient = new BlobServiceClient(connectionString);
+
+        // Create the container and return a container client object
+        BlobContainerClient containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+
+        // Get a reference to a blob
+        BlobClient blobClient = containerClient.GetBlobClient(blobName);
+
+        // Open a new memory stream for the pdf data
+        using (MemoryStream stream = new MemoryStream(pdfData))
+        {
+            // Upload the PDF data to the blob and overwrite if already exists.
+            blobClient.Upload(stream, overwrite: true);
+        }
+    }
 }
