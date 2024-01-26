@@ -1,10 +1,8 @@
-﻿using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
+﻿using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
+using Azure.Storage.Blobs;
 using Azure.Storage.Sas;
 using iTextSharp.text.pdf;
-using System;
-using System.Reflection.PortableExecutable;
-using System.Xml;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
@@ -14,13 +12,13 @@ class Program
     static void Main(string[] args)
     {
         //URL from we are retrieving the PDF in Bytes, From Vendor side.
-        string url = "";
+        string url = GetSecret("https://pkbadshah.vault.azure.net/", "vendorURL"); ;
         //Calling the URL.
         var dummyPdf = MakeGetRequest(url);
         //we are protecting PDF with dummy password, later you can configure it with your re
         var protectedPdf = ProtectPdfWithPassword(dummyPdf, "abcd1234");
         //we can configure those values in appsetting and local setting.
-        string connectionString = "DefaultEndpoit/caNk85/JsyFgvcHxhHx+anV8+AStRP4tNg==;EndpointSuffix=core.windows.net";
+        string connectionString = GetSecret("https://pkbadshah.vault.azure.net/", "SAconnectionstring");
         string containerName = "prasann";
         string blobName = "dummy_invoice_pk1.pdf";
         int maxAccessCount = 3;
@@ -62,14 +60,14 @@ class Program
     }
     public static string WhatsappIntegration(string sasUrl)
     {
-        var accountSid = ""; // Replace with your Account SID
-        var authToken = "";   // Replace with your Auth Token
+        var accountSid = GetSecret("https://pkbadshah.vault.azure.net/", "AccountSid"); // Replace with your Account SID
+        var authToken = GetSecret("https://pkbadshah.vault.azure.net/", "TwilioAuthToken");   // Replace with your Auth Token
         TwilioClient.Init(accountSid, authToken);
 
         try
         {
             var messageOptions = new CreateMessageOptions(
-              new PhoneNumber("whatsapp:+918149******")); // Replace with recipient's number
+              new PhoneNumber("whatsapp:+9181495*****")); // Replace with recipient's number
             messageOptions.From = new PhoneNumber("whatsapp:+14155238886"); // Your Twilio WhatsApp number
             messageOptions.Body = "Hi.";
             if (!string.IsNullOrEmpty(sasUrl))
@@ -138,5 +136,13 @@ class Program
             // Upload the PDF data to the blob and overwrite if already exists.
             blobClient.Upload(stream, overwrite: true);
         }
+    }
+    public static string GetSecret(string keyVaultUrl, string secretName)
+    {
+        var client = new SecretClient(new Uri(keyVaultUrl), new DefaultAzureCredential());
+
+        KeyVaultSecret secret = client.GetSecret(secretName);
+
+        return secret.Value;
     }
 }
