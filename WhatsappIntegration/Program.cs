@@ -4,6 +4,8 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Sas;
 using iTextSharp.text.pdf;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.FeatureManagement;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
@@ -11,6 +13,7 @@ using Twilio.Types;
 class Program
 {
     private static IConfiguration Configuration { get; set; }
+    private static IFeatureManager FeatureManager { get; set; }
     static void Main(string[] args)
     {
         InitializeConfiguration();
@@ -32,7 +35,15 @@ class Program
         //generating the SAS with time period. after the time period it will not accessible.
         string sasToken = GenerateSasToken(connectionString, containerName, blobName, maxAccessCount, expirationTime);
         //integration with Twilio. to send PDF and message to User.
-        WhatsappIntegration(sasToken);       
+        bool isWhatsappEnabled = FeatureManager.IsEnabledAsync("isWhatsappEnabled").Result;
+        if (isWhatsappEnabled)
+        {
+            WhatsappIntegration(sasToken);
+        }
+        else
+        {
+            Console.WriteLine("Skip Whatsapp call");
+        }  
     }
     private static void InitializeConfiguration()
     {
@@ -41,9 +52,17 @@ class Program
         // Add Azure App Configuration
         // Assuming you have stored the connection string to Azure App Configuration in Key Vault
         string appConfigConnectionString = "Endpoint=https://appconfig-pk.azconfig.io;Id=nwcL;Secret=2/FBbhSF1KDW/gmCcG0cYL2u20vwjD21WokPOMnDPSU=";
-        builder.AddAzureAppConfiguration(appConfigConnectionString);
+        builder.AddAzureAppConfiguration(Options => Options.Connect(appConfigConnectionString).UseFeatureFlags());
 
         Configuration = builder.Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(Configuration);
+        services.AddFeatureManagement();
+        var serviceProvider = services.BuildServiceProvider();
+
+        // Get the feature manager
+        FeatureManager = serviceProvider.GetRequiredService<IFeatureManager>();
     }
     static string GenerateSasToken(string connectionString, string containerName, string blobName, int maxAccessCount, TimeSpan expirationTime)
     {
