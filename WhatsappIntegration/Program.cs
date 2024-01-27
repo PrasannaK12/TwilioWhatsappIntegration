@@ -9,6 +9,7 @@ using Microsoft.FeatureManagement;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
+using WhatsappIntegration.caching;
 
 class Program
 {
@@ -93,15 +94,25 @@ class Program
     }
     public static string WhatsappIntegration(string sasUrl)
     {
-        var accountSid = GetSecret("https://pkbadshah.vault.azure.net/", "AccountSid"); // Replace with your Account SID
-        var authToken = GetSecret("https://pkbadshah.vault.azure.net/", "TwilioAuthToken");   // Replace with your Auth Token
+        var accountSid = rediscache.getValue("AccountSid");
+        if (accountSid == null)
+        {
+            accountSid = GetSecret("https://pkbadshah.vault.azure.net/", "AccountSid");
+            rediscache.setValue("AccountSid", accountSid);
+        }
+        var authToken = rediscache.getValue("TwilioAuthToken");
+        if (authToken == null)
+        {
+            authToken = GetSecret("https://pkbadshah.vault.azure.net/", "TwilioAuthToken");
+            rediscache.setValue("TwilioAuthToken", authToken);
+        }
         TwilioClient.Init(accountSid, authToken);
 
         try
         {
             var messageOptions = new CreateMessageOptions(
-              new PhoneNumber("whatsapp:+9181495*****")); // Replace with recipient's number
-            messageOptions.From = new PhoneNumber("whatsapp:+14155238886"); // Your Twilio WhatsApp number
+              new PhoneNumber("whatsapp:+9181495*****"));
+            messageOptions.From = new PhoneNumber("whatsapp:+14155238886");
             messageOptions.Body = "Hi.";
             if (!string.IsNullOrEmpty(sasUrl))
             {
