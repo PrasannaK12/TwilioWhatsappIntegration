@@ -3,22 +3,26 @@ using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
 using Azure.Storage.Sas;
 using iTextSharp.text.pdf;
+using Microsoft.Extensions.Configuration;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
 
 class Program
 {
+    private static IConfiguration Configuration { get; set; }
     static void Main(string[] args)
     {
+        InitializeConfiguration();
         //URL from we are retrieving the PDF in Bytes, From Vendor side.
-        string url = GetSecret("https://pkbadshah.vault.azure.net/", "vendorURL"); ;
+        string url = Configuration["vendorURL"]; ;
         //Calling the URL.
         var dummyPdf = MakeGetRequest(url);
         //we are protecting PDF with dummy password, later you can configure it with your re
         var protectedPdf = ProtectPdfWithPassword(dummyPdf, "abcd1234");
         //we can configure those values in appsetting and local setting.
-        string connectionString = GetSecret("https://pkbadshah.vault.azure.net/", "SAconnectionstring");
+        var connectionString = Configuration["SAconnectionstring"];
+        //connectionString = GetSecret("https://pkbadshah.vault.azure.net/", "SAconnectionstring");
         string containerName = "prasann";
         string blobName = "dummy_invoice_pk1.pdf";
         int maxAccessCount = 3;
@@ -30,7 +34,17 @@ class Program
         //integration with Twilio. to send PDF and message to User.
         WhatsappIntegration(sasToken);       
     }
+    private static void InitializeConfiguration()
+    {
+        var builder = new ConfigurationBuilder();
 
+        // Add Azure App Configuration
+        // Assuming you have stored the connection string to Azure App Configuration in Key Vault
+        string appConfigConnectionString = "Endpoint=https://appconfig-pk.azconfig.io;Id=nwcL;Secret=2/FBbhSF1KDW/gmCcG0cYL2u20vwjD21WokPOMnDPSU=";
+        builder.AddAzureAppConfiguration(appConfigConnectionString);
+
+        Configuration = builder.Build();
+    }
     static string GenerateSasToken(string connectionString, string containerName, string blobName, int maxAccessCount, TimeSpan expirationTime)
     {
         var blobServiceClient = new BlobServiceClient(connectionString);
